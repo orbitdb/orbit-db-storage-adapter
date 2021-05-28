@@ -2,6 +2,7 @@
 
 const levelup = require('levelup')
 const level = require('level')
+const reachdown = require('reachdown')
 const fs = (typeof window === 'object' || typeof self === 'object') ? null : eval('require("fs")') // eslint-disable-line
 
 // Should work for all abstract-leveldown compliant stores
@@ -33,21 +34,20 @@ class Storage {
     this.options = { down: leveldownOptions }
   }
 
-  createStore (directory = './orbitdb', options = {}) {
-    // TODO: Refactor to not use async Promise executor
-    return new Promise(async (resolve, reject) => { /* eslint-disable-line */
-      this.options.up = options
-      await this.preCreate(directory, this.options)
-      let store, db
+  async createStore (directory = './orbitdb', options = {}) {
+    this.options.up = options
+    await this.preCreate(directory, this.options)
+    let store, db
 
-      if (this.storage) {
-        db = this.storage(directory, this.options.down)
+    if (this.storage) {
+      db = this.storage(directory, this.options.down)
 
-        // For compatibility with older abstract-leveldown stores
-        if (!db.status) db.status = 'unknown-shim'
-        if (!db.location) db.location = directory
+      // For compatibility with older abstract-leveldown stores
+      if (!db.status) db.status = 'unknown-shim'
+      if (!db.location) db.location = directory
 
-        store = levelup(db, options)
+      store = levelup(db, options)
+      await new Promise((resolve, reject) => {
         store.open((err) => {
           if (err) {
             return reject(err)
@@ -57,14 +57,49 @@ class Storage {
           if (db && db.status === 'unknown-shim') db.status = 'open'
           resolve(store)
         })
-      } else {
-        // Default leveldown or level-js store with directory creation
-        if (fs && fs.mkdirSync) fs.mkdirSync(directory, { recursive: true })
-        const db = level(directory, options)
-        await db.open()
-        resolve(db)
-      }
+      })
+    } else {
+      // Default leveldown or level-js store with directory creation
+      if (fs && fs.mkdirSync) fs.mkdirSync(directory, { recursive: true })
+      db = level(directory, options)
+      await db.open()
+    }
+
+    store = store || db
+    const leveljs = store && reachdown(store, 'level-js', true)
+    if (leveljs && leveljs.upgrade) {
+      await this._leveljsUpgrade(store, leveljs)
+    }
+
+    return store
+  }
+
+  // upgrade level-js to version 5.0.0
+  // https://github.com/Level/level-js/blob/master/UPGRADING.md#500
+  async _leveljsUpgrade (store, leveljs) {
+    const upgradeKey = new Uint8Array([0])
+
+    async function isUpgraded () {
+      return Boolean(await store.get(upgradeKey).catch(e => false))
+    }
+    async function setUpgraded () {
+      await store.put(upgradeKey, '1')
+    }
+
+    // return if already upgraded
+    if (await isUpgraded()) {
+      store._leveljs5 = true
+      return
+    }
+
+    // upgrade store and persist that it was upgraded
+    await new Promise((resolve, reject) => {
+      leveljs.upgrade(function (err) {
+        if (err) reject(err)
+        else resolve()
+      })
     })
+    await setUpgraded()
   }
 
   destroy (store) {

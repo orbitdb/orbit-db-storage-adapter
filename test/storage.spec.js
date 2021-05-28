@@ -2,6 +2,9 @@ const assert = require('assert')
 
 const Storage = require('../src')
 const implementations = require('./implementations')
+const levelup = require('levelup')
+const isNode = require('is-node')
+const leveljs4 = isNode ? {} : require('level-js4')
 const timeout = 2000
 
 const data = [
@@ -110,5 +113,30 @@ implementations.forEach(implementation => {
         }
       })
     })
+
+    if (implementation.key === 'level-js') {
+      it('supports and upgrades level-js4 stores', async () => {
+        const location = './version4'
+        const key = 'upgrade'
+        const value = ' to version 5'
+
+        // add to db using level-js version 4
+        const db4 = levelup(leveljs4(location))
+        await db4.open()
+        await db4.put(key, value)
+        await db4.close()
+
+        // upgrades the db
+        store = await storage.createStore(location)
+        assert.strictEqual((await store.get(key)).toString(), value)
+        assert.strictEqual(store._leveljs5, undefined)
+
+        // persisted that db was upgraded
+        await store.close()
+        store = await storage.createStore(location)
+        assert.strictEqual((await store.get(key)).toString(), value)
+        assert.strictEqual(store._leveljs5, true)
+      })
+    }
   })
 })
