@@ -38,7 +38,8 @@
   "homepage": "https://github.com/orbitdb/orbit-db-storage-adapter#readme",
   "dependencies": {
     "level": "^7.0.0",
-    "mkdirp": "^0.5.1"
+    "mkdirp": "^0.5.1",
+    "reachdown": "^1.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.4.5",
@@ -50,7 +51,9 @@
     "assert": "^2.0.0",
     "babel-loader": "^8.0.6",
     "fruitdown": "^1.0.2",
+    "is-node": "^1.0.2",
     "jsondown": "^1.0.0",
+    "level-js4": "npm:level-js@4",
     "localstorage-down": "^0.6.7",
     "memdown": "^6.0.0",
     "mocha": "^6.1.4",
